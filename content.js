@@ -525,10 +525,14 @@ function chooseImg(srcs, _x, _y) {
 
 // A helper for CORS-free dataUrl
 function getImageDataUrl(url, cb) {
-    if (url.startsWith("data:")) return cb(url);
-    chrome.runtime.sendMessage({ action: "fetch_image_base64", url }, (res) => {
-        if (res && res.dataUrl) cb(res.dataUrl);
-        else cb(url); // fallback
+    if (url.startsWith("data:")) return cb(url, "");
+    chrome.runtime.sendMessage({
+        action: "fetch_image_base64",
+        url,
+        referer: location.href
+    }, (res) => {
+        if (res && res.dataUrl) cb(res.dataUrl, res.serverMime || "");
+        else cb(url, ""); // fallback
     });
 }
 
@@ -981,10 +985,40 @@ function openGalleryMode() {
         btn.innerText = "Zipping...";
         btn.disabled = true;
 
+        // Helper: detect file extension with multiple fallback strategies
+        function extFromUrl(originalUrl) {
+            try {
+                let pathname = new URL(originalUrl).pathname;
+                let ext = pathname.split('.').pop().split('?')[0].toLowerCase();
+                const valid = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'svg', 'tiff', 'avif'];
+                if (valid.includes(ext)) return ext === 'jpeg' ? 'jpg' : ext;
+            } catch (e) { }
+            return null;
+        }
+        function extFromMime(mime) {
+            const map = { 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/bmp': 'bmp', 'image/svg+xml': 'svg', 'image/tiff': 'tiff', 'image/avif': 'avif' };
+            return map[(mime || '').split(';')[0].trim()] || null;
+        }
+        function extFromMagicBytes(base64Data) {
+            // Detect from first few bytes of base64
+            if (base64Data.startsWith('UklGR')) return 'webp'; // RIFF....WEBP
+            if (base64Data.startsWith('/9j/')) return 'jpg';   // JPEG SOI
+            if (base64Data.startsWith('iVBOR')) return 'png';  // PNG
+            if (base64Data.startsWith('R0lGO')) return 'gif';  // GIF
+            return null;
+        }
+        function getBestExt(originalUrl, dataUrl, serverMime) {
+            return extFromUrl(originalUrl)
+                || extFromMime(serverMime)
+                || extFromMime(dataUrl.split(';')[0].replace('data:', ''))
+                || extFromMagicBytes((dataUrl.split(',')[1] || '').substring(0, 12))
+                || 'png';
+        }
+
         let zip = new JSZip();
         let promises = toDownload.map((img, i) => {
             return new Promise((resolve) => {
-                getImageDataUrl(img.src, (dataUrl) => {
+                getImageDataUrl(img.src, (dataUrl, serverMime) => {
                     if (targetW || targetH) {
                         let tempImg = new Image();
                         tempImg.onload = () => {
@@ -1009,7 +1043,8 @@ function openGalleryMode() {
                     } else {
                         let parts = dataUrl.split(',');
                         if (parts.length > 1) {
-                            zip.file(`image_${i + 1}.png`, parts[1], { base64: true });
+                            let ext = getBestExt(img.src, dataUrl, serverMime);
+                            zip.file(`image_${i + 1}.${ext}`, parts[1], { base64: true });
                         }
                         resolve();
                     }

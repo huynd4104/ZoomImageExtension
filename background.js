@@ -28,11 +28,18 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === "fetch_image_base64") {
-        fetch(request.url)
-            .then(res => res.blob())
-            .then(blob => {
+        const headers = {
+            "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+            "Referer": request.referer || request.url,
+        };
+        fetch(request.url, { headers })
+            .then(res => {
+                const serverMime = res.headers.get("Content-Type") || "";
+                return res.blob().then(blob => ({ blob, serverMime }));
+            })
+            .then(({ blob, serverMime }) => {
                 const reader = new FileReader();
-                reader.onloadend = () => sendResponse({ dataUrl: reader.result });
+                reader.onloadend = () => sendResponse({ dataUrl: reader.result, serverMime });
                 reader.readAsDataURL(blob);
             })
             .catch(err => {
