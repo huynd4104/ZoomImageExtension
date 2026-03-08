@@ -1,0 +1,38 @@
+{
+    "manifest_version": 3,
+    "name": "Magnify Any Image",
+    "version": "1.0.0",
+    "description": "View any images in magnified window where you can zoom in/out, rotate, drag, and more.",
+    "permissions": [
+        "contextMenus",
+        "storage"
+    ],
+    "host_permissions": [
+        "<all_urls>"
+    ],
+    "action": {
+        "default_popup": "popup.html",
+        "default_title": "Magnify Any Image"
+    },
+    "background": {
+        "service_worker": "background.js"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "css": [
+                "magnify_image.css"
+            ],
+            "js": [
+                "jszip.min.js",
+                "jsQR.js",
+                "tesseract.min.js",
+                "content.js"
+            ],
+            "run_at": "document_start",
+            "all_frames": true
+        }
+    ]
+}
