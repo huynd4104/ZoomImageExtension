@@ -1016,6 +1016,7 @@ function openGalleryMode() {
         let promises = toDownload.map((img, i) => {
             return new Promise((resolve) => {
                 getImageDataUrl(img.src, (dataUrl, serverMime) => {
+                    if (!dataUrl) { resolve(); return; }
                     if (targetW || targetH) {
                         let tempImg = new Image();
                         tempImg.onload = () => {
@@ -1029,8 +1030,8 @@ function openGalleryMode() {
                             let ctx = canvas.getContext("2d");
                             ctx.drawImage(tempImg, 0, 0, canvas.width, canvas.height);
                             let resizedDataUrl = canvas.toDataURL("image/png");
-                            let parts = resizedDataUrl.split(',');
-                            if (parts.length > 1) {
+                            let parts = (resizedDataUrl || "").split(',');
+                            if (parts.length > 1 && parts[1]) {
                                 zip.file(`${prefix}${i + 1}.png`, parts[1], { base64: true });
                             }
                             resolve();
@@ -1038,8 +1039,8 @@ function openGalleryMode() {
                         tempImg.onerror = () => resolve();
                         tempImg.src = dataUrl;
                     } else {
-                        let parts = dataUrl.split(',');
-                        if (parts.length > 1) {
+                        let parts = (dataUrl || "").split(',');
+                        if (parts.length > 1 && parts[1]) {
                             let ext = getBestExt(img.src, dataUrl, serverMime);
                             zip.file(`${prefix}${i + 1}.${ext}`, parts[1], { base64: true });
                         }
@@ -1059,7 +1060,8 @@ function openGalleryMode() {
             btn.innerText = "Download ZIP";
             btn.disabled = false;
         }).catch(err => {
-            alert("Error creating ZIP!");
+            console.error("ZIP Generation Error:", err);
+            alert("Error creating ZIP! See console for details: " + err);
             btn.innerText = "Download ZIP";
             btn.disabled = false;
         });
