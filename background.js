@@ -27,7 +27,15 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 });
 
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === "fetch_image_base64") {
+    if (request.action === "inject_script") {
+        chrome.scripting.executeScript({
+            target: { tabId: sender.tab.id, frameIds: [sender.frameId] },
+            files: [request.file]
+        }).then(() => sendResponse({ success: true })).catch(err => {
+            console.error(err); sendResponse({ success: false, error: err.toString() });
+        });
+        return true;
+    } else if (request.action === "fetch_image_base64") {
         const headers = {
             "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
             "Referer": request.referer || request.url,

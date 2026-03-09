@@ -7,13 +7,18 @@ const CACHED = {
     configSize: [20, 20], // default minimum hover width/height
 };
 
+const MagnifySizeKey = "ufs_magnify_image_size";
+
 // Listen to changes in toggle switch
-chrome.storage.local.get(["extension_enabled", "gallery_mode_enabled"], (result) => {
+chrome.storage.local.get(["extension_enabled", "gallery_mode_enabled", MagnifySizeKey], (result) => {
     if (result.extension_enabled !== undefined) {
         extensionEnabled = result.extension_enabled;
     }
     if (result.gallery_mode_enabled !== undefined) {
         galleryModeEnabled = result.gallery_mode_enabled;
+    }
+    if (result[MagnifySizeKey]) {
+        CACHED.configSize = result[MagnifySizeKey].split("x");
     }
 });
 
@@ -32,21 +37,11 @@ chrome.storage.onChanged.addListener((changes, namespace) => {
         if (changes.gallery_mode_enabled) {
             galleryModeEnabled = changes.gallery_mode_enabled.newValue;
         }
+        if (changes[MagnifySizeKey]) {
+            CACHED.configSize = changes[MagnifySizeKey].newValue.split("x");
+        }
     }
 });
-
-const MagnifySizeKey = "ufs_magnify_image_size";
-const getConfigSize = async () => {
-    return new Promise((resolve) => {
-        chrome.storage.local.get([MagnifySizeKey], (result) => {
-            let data = result[MagnifySizeKey];
-            if (data) {
-                CACHED.configSize = data.split("x");
-            }
-            resolve(CACHED.configSize);
-        });
-    });
-};
 
 function getMousePos() {
     return CACHED.mouse;
@@ -210,35 +205,28 @@ function getImgSrcsFromElement(ele) {
     return results;
 }
 
-function getAllChildElements(element) {
-    let childElements = [];
-    let children = element.children;
-    if (children?.length) {
-        childElements = childElements.concat(Array.from(children));
-        for (let child of children) {
-            childElements = childElements.concat(getAllChildElements(child));
-        }
-    }
-    return childElements;
-}
+
 
 async function getImagesAtPos(x, y) {
-    let eles = Array.from(document.querySelectorAll("*"));
     let pos = validateMouse(x, y);
+    let eles = Array.from(document.elementsFromPoint(pos.x, pos.y) || []);
     let sourceEles = [];
 
-    eles = eles.reverse().filter((ele) => {
-        let rect = ele.getBoundingClientRect();
-        let isAtMouse = rect.left <= pos.x && rect.right >= pos.x && rect.top <= pos.y && rect.bottom >= pos.y;
-        if (isAtMouse && /picture|img/i.test(ele.tagName)) {
+    eles.forEach((ele) => {
+        if (/picture|img/i.test(ele.tagName)) {
             let sources = Array.from(ele.querySelectorAll("source"));
             if (sources?.length) sourceEles = sourceEles.concat(sources);
+            let p = ele.closest("picture");
+            if (p) {
+                eles.push(p);
+                let pSources = Array.from(p.querySelectorAll("source"));
+                if (pSources?.length) sourceEles = sourceEles.concat(pSources);
+            }
         }
-        return isAtMouse;
     });
 
     eles = eles.concat(sourceEles);
-    eles = eles.concat(eles.slice(0, 4).map((ele) => getAllChildElements(ele)).flat());
+    eles = eles.concat(eles.slice(0, 4).map((ele) => Array.from(ele.querySelectorAll('*'))).flat());
 
     if (!eles.length) return null;
 
@@ -325,9 +313,9 @@ function initHoverAndCtrl() {
 
     (document.body || document.documentElement).appendChild(div);
 
-    window.addEventListener("mouseover", async (e) => {
+    window.addEventListener("mouseover", (e) => {
         if (!extensionEnabled) return;
-        const [width, height] = await getConfigSize();
+        const [width, height] = CACHED.configSize;
         if (e.target.clientWidth < width || e.target.clientHeight < height) return;
 
         let srcs = getImgSrcsFromElement(e.target);
@@ -649,9 +637,10 @@ function createPreview(src, _x, _y, onClose = () => { }, onFoundBigImg = () => {
     };
     openNewTab.onclick = () => window.open(img.src, "_blank");
 
-    scanQr.onclick = () => {
+    scanQr.onclick = async () => {
         let prevText = scanQr.innerText;
         scanQr.innerText = "⏳";
+        if (!window.jsQR) await new Promise(r => chrome.runtime.sendMessage({ action: "inject_script", file: "jsQR.js" }, r));
         getImageDataUrl(img.src, (dataUrl) => {
             let tempImg = new Image();
             tempImg.onload = () => {
@@ -683,10 +672,12 @@ function createPreview(src, _x, _y, onClose = () => { }, onFoundBigImg = () => {
         });
     };
 
-    extractText.onclick = () => {
-        if (!window.Tesseract) { alert("Tesseract.js not loaded."); return; }
+    extractText.onclick = async () => {
         let prevText = extractText.innerText;
         extractText.innerText = "⏳";
+
+        if (!window.Tesseract) await new Promise(r => chrome.runtime.sendMessage({ action: "inject_script", file: "tesseract.min.js" }, r));
+        if (!window.Tesseract) { alert("Tesseract.js not loaded."); extractText.innerText = prevText; return; }
 
         getImageDataUrl(img.src, (dataUrl) => {
             Tesseract.recognize(dataUrl, 'eng')
@@ -973,6 +964,11 @@ function openGalleryMode() {
     };
 
     document.getElementById("ufs-gal-dl").onclick = async () => {
+        let btn = document.getElementById("ufs-gal-dl");
+        let prevText = btn.innerText;
+        btn.innerText = "⏳";
+        if (!window.JSZip) await new Promise(r => chrome.runtime.sendMessage({ action: "inject_script", file: "jszip.min.js" }, r));
+        btn.innerText = prevText;
         if (!window.JSZip) { alert("JSZip library not found!"); return; }
 
         let targetW = parseInt(document.getElementById("ufs-gal-mw").value) || null;
@@ -981,7 +977,6 @@ function openGalleryMode() {
         let toDownload = imagesData.filter(img => img.selected);
         if (toDownload.length === 0) { alert("No images selected!"); return; }
 
-        let btn = document.getElementById("ufs-gal-dl");
         btn.innerText = "Zipping...";
         btn.disabled = true;
 
