@@ -847,6 +847,7 @@ function openGalleryMode() {
     leftControls.style.cssText = "display: flex; gap: 10px; align-items: center;";
     leftControls.innerHTML = `
         <strong style="font-size: 18px; margin-right: 15px;">Gallery Mode</strong>
+        <label>Prefix: <input type="text" id="ufs-gal-prefix" placeholder="image_" style="width: 80px; padding: 4px;"/></label>
         <label>Width: <input type="number" id="ufs-gal-mw" placeholder="Auto" style="width: 70px; padding: 4px;"/></label>
         <label>Height: <input type="number" id="ufs-gal-mh" placeholder="Auto" style="width: 70px; padding: 4px;"/></label>
     `;
@@ -973,6 +974,7 @@ function openGalleryMode() {
 
         let targetW = parseInt(document.getElementById("ufs-gal-mw").value) || null;
         let targetH = parseInt(document.getElementById("ufs-gal-mh").value) || null;
+        let prefix = document.getElementById("ufs-gal-prefix").value.trim() || "image_";
 
         let toDownload = imagesData.filter(img => img.selected);
         if (toDownload.length === 0) { alert("No images selected!"); return; }
@@ -1029,7 +1031,7 @@ function openGalleryMode() {
                             let resizedDataUrl = canvas.toDataURL("image/png");
                             let parts = resizedDataUrl.split(',');
                             if (parts.length > 1) {
-                                zip.file(`image_${i + 1}.png`, parts[1], { base64: true });
+                                zip.file(`${prefix}${i + 1}.png`, parts[1], { base64: true });
                             }
                             resolve();
                         };
@@ -1039,7 +1041,7 @@ function openGalleryMode() {
                         let parts = dataUrl.split(',');
                         if (parts.length > 1) {
                             let ext = getBestExt(img.src, dataUrl, serverMime);
-                            zip.file(`image_${i + 1}.${ext}`, parts[1], { base64: true });
+                            zip.file(`${prefix}${i + 1}.${ext}`, parts[1], { base64: true });
                         }
                         resolve();
                     }
