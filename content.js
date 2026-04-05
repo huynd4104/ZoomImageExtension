@@ -58,6 +58,22 @@ function validateMouse(x, y) {
     return { x, y };
 }
 
+function isEditableElement(target) {
+    if (!target) return false;
+    if (target.isContentEditable) return true;
+    const tagName = (target.tagName || "").toLowerCase();
+    return tagName === "input" || tagName === "textarea" || tagName === "select";
+}
+
+function openGoogleSearchForSelection() {
+    const selectedText = (window.getSelection()?.toString() || "").trim();
+    if (!selectedText) {
+        return;
+    }
+    const url = `https://www.google.com/search?q=${encodeURIComponent(selectedText)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+}
+
 // Simple notify replacement using standard DOM
 function notify({ msg, duration = 3000, x = window.innerWidth / 2, y = window.innerHeight - 100 }) {
     let id = "ufs_notify_div";
@@ -339,6 +355,20 @@ function initHoverAndCtrl() {
     });
 
     if (window === window.top) {
+        window.addEventListener("keydown", (event) => {
+            if (!extensionEnabled) return;
+            if (event.repeat) return;
+            if (isEditableElement(event.target)) return;
+
+            const isMacShortcut = event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey;
+            const isWinShortcut = event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey;
+            if ((isMacShortcut || isWinShortcut) && event.code === "KeyQ") {
+                event.preventDefault();
+                event.stopPropagation();
+                openGoogleSearchForSelection();
+            }
+        }, true);
+
         onDoublePress("Control", () => {
             if (!extensionEnabled) return;
 
